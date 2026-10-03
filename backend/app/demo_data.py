@@ -1,7 +1,7 @@
 """
 Deterministic demo data generator for CityFlow AI.
 
-Creates a realistic small-city road network with 8 cameras,
+Creates a realistic small-city road network with 11 cameras,
 18 roads, 10 intersections, and 24 hours of synthetic traffic
 measurements that follow realistic daily patterns.
 
@@ -51,42 +51,41 @@ def _vehicle_composition(total: int, rng: random.Random) -> dict:
 
 
 # ─── Network Definition ─────────────────────────────────────────────
-# A small Dutch-style city center with realistic street names
-# Coordinates centered around a fictional city (based on Delft-like layout)
-# Using real-ish coordinates near 52.01°N, 4.36°E
+# Synthetic network used by the closure simulator. These nodes are schematic,
+# not mapped Kosovo intersections; real named places are reserved for cameras.
 
 INTERSECTIONS = [
-    {"id": "int_01", "name": "Marktplein",        "lat": 52.0120, "lng": 4.3580, "type": "signalized"},
-    {"id": "int_02", "name": "Stationsplein",     "lat": 52.0155, "lng": 4.3580, "type": "signalized"},
-    {"id": "int_03", "name": "Noordpoort",        "lat": 52.0175, "lng": 4.3620, "type": "roundabout"},
-    {"id": "int_04", "name": "Oost Kruising",     "lat": 52.0130, "lng": 4.3660, "type": "signalized"},
-    {"id": "int_05", "name": "Zuidplein",         "lat": 52.0085, "lng": 4.3600, "type": "signalized"},
-    {"id": "int_06", "name": "West Kruising",     "lat": 52.0130, "lng": 4.3500, "type": "signalized"},
-    {"id": "int_07", "name": "Haven Kruising",    "lat": 52.0100, "lng": 4.3520, "type": "roundabout"},
-    {"id": "int_08", "name": "Park Kruising",     "lat": 52.0160, "lng": 4.3500, "type": "uncontrolled"},
-    {"id": "int_09", "name": "Industrieplein",    "lat": 52.0180, "lng": 4.3540, "type": "signalized"},
-    {"id": "int_10", "name": "Brug Kruising",     "lat": 52.0095, "lng": 4.3660, "type": "signalized"},
+    {"id": "int_01", "name": "Network node 01", "lat": 52.0120, "lng": 4.3580, "type": "signalized"},
+    {"id": "int_02", "name": "Network node 02", "lat": 52.0155, "lng": 4.3580, "type": "signalized"},
+    {"id": "int_03", "name": "Network node 03", "lat": 52.0175, "lng": 4.3620, "type": "roundabout"},
+    {"id": "int_04", "name": "Network node 04", "lat": 52.0130, "lng": 4.3660, "type": "signalized"},
+    {"id": "int_05", "name": "Network node 05", "lat": 52.0085, "lng": 4.3600, "type": "signalized"},
+    {"id": "int_06", "name": "Network node 06", "lat": 52.0130, "lng": 4.3500, "type": "signalized"},
+    {"id": "int_07", "name": "Network node 07", "lat": 52.0100, "lng": 4.3520, "type": "roundabout"},
+    {"id": "int_08", "name": "Network node 08", "lat": 52.0160, "lng": 4.3500, "type": "uncontrolled"},
+    {"id": "int_09", "name": "Network node 09", "lat": 52.0180, "lng": 4.3540, "type": "signalized"},
+    {"id": "int_10", "name": "Network node 10", "lat": 52.0095, "lng": 4.3660, "type": "signalized"},
 ]
 
 ROADS = [
-    {"id": "road_01", "name": "Weststraat",       "from": "int_06", "to": "int_01", "cap": 3100, "flow": 2430, "len": 0.8, "speed": 40, "lanes": 2, "type": "primary"},
-    {"id": "road_02", "name": "Noordweg",          "from": "int_02", "to": "int_03", "cap": 2200, "flow": 700,  "len": 0.5, "speed": 50, "lanes": 2, "type": "secondary"},
-    {"id": "road_03", "name": "Kerkstraat",        "from": "int_01", "to": "int_04", "cap": 1800, "flow": 620,  "len": 0.6, "speed": 30, "lanes": 1, "type": "secondary"},
-    {"id": "road_04", "name": "Marktstraat",       "from": "int_01", "to": "int_05", "cap": 2500, "flow": 450,  "len": 0.4, "speed": 30, "lanes": 2, "type": "primary"},
-    {"id": "road_05", "name": "Stationsweg",       "from": "int_01", "to": "int_02", "cap": 3500, "flow": 2800, "len": 1.0, "speed": 50, "lanes": 2, "type": "primary"},
-    {"id": "road_06", "name": "Havenstraat",       "from": "int_07", "to": "int_05", "cap": 1600, "flow": 520,  "len": 0.7, "speed": 30, "lanes": 1, "type": "secondary"},
-    {"id": "road_07", "name": "Parkweg",           "from": "int_08", "to": "int_06", "cap": 1900, "flow": 380,  "len": 0.9, "speed": 40, "lanes": 2, "type": "secondary"},
-    {"id": "road_08", "name": "Industrieweg",      "from": "int_09", "to": "int_03", "cap": 2800, "flow": 1950, "len": 1.2, "speed": 60, "lanes": 2, "type": "primary"},
-    {"id": "road_09", "name": "Brugstraat",        "from": "int_05", "to": "int_10", "cap": 1400, "flow": 410,  "len": 0.3, "speed": 30, "lanes": 1, "type": "tertiary"},
-    {"id": "road_10", "name": "Oosterweg",         "from": "int_04", "to": "int_10", "cap": 2000, "flow": 780,  "len": 0.6, "speed": 40, "lanes": 2, "type": "secondary"},
-    {"id": "road_11", "name": "Ringweg Noord",     "from": "int_09", "to": "int_02", "cap": 4000, "flow": 3100, "len": 1.5, "speed": 70, "lanes": 2, "type": "primary"},
-    {"id": "road_12", "name": "Ringweg West",      "from": "int_08", "to": "int_09", "cap": 3800, "flow": 2600, "len": 1.3, "speed": 70, "lanes": 2, "type": "primary"},
-    {"id": "road_13", "name": "Kanaalweg",         "from": "int_07", "to": "int_06", "cap": 1500, "flow": 480,  "len": 0.5, "speed": 30, "lanes": 1, "type": "tertiary"},
-    {"id": "road_14", "name": "Molenstraat",       "from": "int_02", "to": "int_04", "cap": 1700, "flow": 590,  "len": 0.8, "speed": 30, "lanes": 1, "type": "secondary"},
-    {"id": "road_15", "name": "Vijverweg",         "from": "int_06", "to": "int_07", "cap": 1200, "flow": 310,  "len": 0.4, "speed": 30, "lanes": 1, "type": "tertiary"},
-    {"id": "road_16", "name": "Schoolstraat",      "from": "int_03", "to": "int_04", "cap": 1600, "flow": 540,  "len": 0.5, "speed": 30, "lanes": 1, "type": "secondary"},
-    {"id": "road_17", "name": "Ringweg Zuid",      "from": "int_07", "to": "int_10", "cap": 3200, "flow": 1850, "len": 1.4, "speed": 60, "lanes": 2, "type": "primary"},
-    {"id": "road_18", "name": "Centrumring",       "from": "int_05", "to": "int_01", "cap": 2000, "flow": 920,  "len": 0.5, "speed": 30, "lanes": 2, "type": "secondary"},
+    {"id": "road_01", "name": "Fushë Kosovë", "from": "int_06", "to": "int_01", "cap": 3100, "flow": 2430, "len": 0.8, "speed": 40, "lanes": 2, "type": "primary"},
+    {"id": "road_02", "name": "Ulpianë", "from": "int_02", "to": "int_03", "cap": 2200, "flow": 700, "len": 0.5, "speed": 50, "lanes": 2, "type": "secondary"},
+    {"id": "road_03", "name": "Pejton", "from": "int_01", "to": "int_04", "cap": 1800, "flow": 620, "len": 0.6, "speed": 30, "lanes": 1, "type": "secondary"},
+    {"id": "road_04", "name": "Connector 04", "from": "int_01", "to": "int_05", "cap": 2500, "flow": 450, "len": 0.4, "speed": 30, "lanes": 2, "type": "primary"},
+    {"id": "road_05", "name": "Bregu i Diellit", "from": "int_01", "to": "int_02", "cap": 3500, "flow": 2800, "len": 1.0, "speed": 50, "lanes": 2, "type": "primary"},
+    {"id": "road_06", "name": "Connector 06", "from": "int_07", "to": "int_05", "cap": 1600, "flow": 520, "len": 0.7, "speed": 30, "lanes": 1, "type": "secondary"},
+    {"id": "road_07", "name": "Connector 07", "from": "int_08", "to": "int_06", "cap": 1900, "flow": 380, "len": 0.9, "speed": 40, "lanes": 2, "type": "secondary"},
+    {"id": "road_08", "name": "Magjistralja Vushtrri–Mitrovicë", "from": "int_09", "to": "int_03", "cap": 2800, "flow": 1950, "len": 1.2, "speed": 60, "lanes": 2, "type": "primary"},
+    {"id": "road_09", "name": "Connector 09", "from": "int_05", "to": "int_10", "cap": 1400, "flow": 410, "len": 0.3, "speed": 30, "lanes": 1, "type": "tertiary"},
+    {"id": "road_10", "name": "Connector 10", "from": "int_04", "to": "int_10", "cap": 2000, "flow": 780, "len": 0.6, "speed": 40, "lanes": 2, "type": "secondary"},
+    {"id": "road_11", "name": "Ortakoll: Wesley Clark, Prizren", "from": "int_09", "to": "int_02", "cap": 4000, "flow": 3100, "len": 1.5, "speed": 70, "lanes": 2, "type": "primary"},
+    {"id": "road_12", "name": "Connector 12", "from": "int_08", "to": "int_09", "cap": 3800, "flow": 2600, "len": 1.3, "speed": 70, "lanes": 2, "type": "primary"},
+    {"id": "road_13", "name": "Connector 13", "from": "int_07", "to": "int_06", "cap": 1500, "flow": 480, "len": 0.5, "speed": 30, "lanes": 1, "type": "tertiary"},
+    {"id": "road_14", "name": "Connector 14", "from": "int_02", "to": "int_04", "cap": 1700, "flow": 590, "len": 0.8, "speed": 30, "lanes": 1, "type": "secondary"},
+    {"id": "road_15", "name": "Connector 15", "from": "int_06", "to": "int_07", "cap": 1200, "flow": 310, "len": 0.4, "speed": 30, "lanes": 1, "type": "tertiary"},
+    {"id": "road_16", "name": "Connector 16", "from": "int_03", "to": "int_04", "cap": 1600, "flow": 540, "len": 0.5, "speed": 30, "lanes": 1, "type": "secondary"},
+    {"id": "road_17", "name": "Connector 17", "from": "int_07", "to": "int_10", "cap": 3200, "flow": 1850, "len": 1.4, "speed": 60, "lanes": 2, "type": "primary"},
+    {"id": "road_18", "name": "Connector 18", "from": "int_05", "to": "int_01", "cap": 2000, "flow": 920, "len": 0.5, "speed": 30, "lanes": 2, "type": "secondary"},
 ]
 
 # Generate geometry (polylines) for each road based on endpoint coordinates
@@ -115,8 +114,11 @@ CAMERAS = [
     {"id": "CAM_04", "name": "Pejton", "road": "road_03", "lat": 42.6570, "lng": 21.1530, "stream_url": "https://gjirafa-video-live.gjirafa.net/gjvideo-slow/mc7-cgv-ra3-a61/tracks-a1/mono.ts.m3u8"},
     {"id": "CAM_05", "name": "Magjistralja Vushtrri–Mitrovicë", "road": "road_08", "lat": 42.8850, "lng": 20.8660, "stream_url": "https://gjirafa-video-live.gjirafa.net/gjvideo-slow/zc6-dfj-mel-af4/tracks-a1/mono.ts.m3u8"},
     {"id": "CAM_06", "name": "Ortakoll: Wesley Clark, Prizren", "road": "road_11", "lat": 42.2140, "lng": 20.7390, "stream_url": "https://gjirafa-video-live.gjirafa.net/gjvideo-slow/yfv-44d-9m7-6sy/tracks-a1/mono.ts.m3u8"},
-    {"id": "CAM_07", "name": "Camera Ringweg Zuid", "road": "road_17", "lat": 52.0098, "lng": 4.3590},
-    {"id": "CAM_08", "name": "Camera Marktstraat", "road": "road_04", "lat": 52.0103, "lng": 4.3590},
+    {"id": "CAM_07", "name": "Veternik 2", "road": None, "lat": 42.6245, "lng": 21.1475, "stream_url": "https://gjirafa-video-live.gjirafa.net/gjvideo-slow/fow-fmi-937-dfk/tracks-v1/mono.ts.m3u8"},
+    {"id": "CAM_08", "name": "Veternik 1", "road": None, "lat": 42.6270, "lng": 21.1450, "stream_url": "https://gjirafa-video-live.gjirafa.net/gjvideo-slow/b67-snx-umr-u3e/tracks-a1/mono.ts.m3u8"},
+    {"id": "CAM_09", "name": "Rr. Tirana, Prizren", "road": None, "lat": 42.2140, "lng": 20.7390, "stream_url": "https://gjirafa-video-live.gjirafa.net/gjvideo-slow/2js-h9r-l1y-rwo/tracks-v1a1/mono.ts.m3u8"},
+    {"id": "CAM_10", "name": "Deçan", "road": None, "lat": 42.5400, "lng": 20.2880, "stream_url": "https://gjirafa-video-live.gjirafa.net/gjvideo-slow/e1f-oy3-gat-494/tracks-a1/mono.ts.m3u8"},
+    {"id": "CAM_11", "name": "Rrethi i Çagllavicës", "road": None, "lat": 42.6270, "lng": 21.1840, "stream_url": "https://gjirafa-video-live.gjirafa.net/gjvideo-slow/0lw-i4w-afw-9pp/tracks-v1a1/mono.ts.m3u8"},
 ]
 
 

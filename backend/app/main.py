@@ -35,7 +35,7 @@ from app.schemas import (
     CompareResponse,
     MultiRoadSimulationRequest,
 )
-from app.demo_data import seed_demo_data, _traffic_multiplier, CAMERAS
+from app.demo_data import seed_demo_data, _traffic_multiplier, CAMERAS, ROADS, INTERSECTIONS
 from app.services.traffic_ingestion import TrafficModelAdapter
 from app.services.camera_inference import camera_inference
 from app.simulation.traffic_simulator import simulate_closure, simulate_multi_closure
@@ -75,10 +75,30 @@ def startup():
             camera = db.query(Camera).filter(Camera.id == camera_config["id"]).first()
             if camera:
                 camera.name = camera_config["name"]
+                camera.road_id = camera_config.get("road")
                 camera.latitude = camera_config["lat"]
                 camera.longitude = camera_config["lng"]
                 camera.stream_url = camera_config.get("stream_url")
                 camera.status = "online" if camera.stream_url else "offline"
+            else:
+                camera = Camera(
+                    id=camera_config["id"],
+                    name=camera_config["name"],
+                    road_id=camera_config.get("road"),
+                    latitude=camera_config["lat"],
+                    longitude=camera_config["lng"],
+                    stream_url=camera_config.get("stream_url"),
+                    status="online" if camera_config.get("stream_url") else "offline",
+                )
+                db.add(camera)
+        for road_config in ROADS:
+            road = db.query(Road).filter(Road.id == road_config["id"]).first()
+            if road:
+                road.name = road_config["name"]
+        for intersection_config in INTERSECTIONS:
+            intersection = db.query(Intersection).filter(Intersection.id == intersection_config["id"]).first()
+            if intersection:
+                intersection.name = intersection_config["name"]
         db.commit()
     finally:
         db.close()
@@ -260,6 +280,11 @@ def get_camera_detail(camera_id: str, db: Session = Depends(get_db)):
     ]
 
     peak = max(measurements, key=lambda m: m.total) if measurements else None
+    measurement_sources = {measurement.source for measurement in measurements}
+    camera_data_source = (
+        "mixed" if len(measurement_sources) > 1
+        else next(iter(measurement_sources), "demo")
+    )
 
     return {
         "id": camera.id,
@@ -274,7 +299,7 @@ def get_camera_detail(camera_id: str, db: Session = Depends(get_db)):
         "peak_hour": peak.hour if peak else None,
         "peak_count": peak.total if peak else None,
         "hourly_data": hourly_data,
-        "data_source": measurements[0].source if measurements else "demo",
+        "data_source": camera_data_source,
     }
 
 
@@ -342,9 +367,8 @@ def traffic_summary(db: Session = Depends(get_db)):
     roads_count = db.query(Road).count()
     cameras_count = db.query(Camera).filter(Camera.status == "online").count()
 
-    # Check if we have observed data
-    observed = db.query(TrafficMeasurement).filter(TrafficMeasurement.source == "observed").count()
-    data_source = "observed" if observed > 0 else "demo"
+    sources = {measurement.source for measurement in measurements}
+    data_source = "mixed" if len(sources) > 1 else next(iter(sources), "demo")
 
     return {
         "total_vehicles_today": total_today,
@@ -384,12 +408,12 @@ def traffic_timeline(db: Session = Depends(get_db)):
             "motorcycles": d["motorcycles"],
         })
 
-    observed = db.query(TrafficMeasurement).filter(TrafficMeasurement.source == "observed").count()
+    sources = {measurement.source for measurement in measurements}
 
     return {
         "date": "2026-10-03",
         "data": data,
-        "data_source": "observed" if observed > 0 else "demo",
+        "data_source": "mixed" if len(sources) > 1 else next(iter(sources), "demo"),
     }
 
 

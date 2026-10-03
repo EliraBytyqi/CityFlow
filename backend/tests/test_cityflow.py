@@ -106,7 +106,7 @@ def test_road_network_creation(db):
 
 
 def test_closure_simulation_and_redistribution(db):
-    # Simulate closing Weststraat (road_01) 100%
+    # Simulate closing the Fushë Kosovë model link (road_01) 100%
     result = simulate_closure(db, road_id="road_01", closure_percentage=100, simulation_hour=8)
 
     assert result["closed_road"] == "road_01"
@@ -180,8 +180,8 @@ def test_e2e_flow(client):
     # Step 1: Query initial roads
     r_resp = client.get("/api/roads")
     roads = r_resp.json()
-    west = next(r for r in roads if r["id"] == "road_01")
-    initial_flow = west["current_flow"]
+    target_link = next(r for r in roads if r["id"] == "road_01")
+    initial_flow = target_link["current_flow"]
     assert initial_flow > 0
 
     # Step 2: Run simulation closure
@@ -196,4 +196,4 @@ def test_e2e_flow(client):
     # Step 3: Verify displaced traffic and explanation
     assert sim_data["displaced_vehicles"] > 0
     assert len(sim_data["roads"]) > 1
-    assert "Weststraat" in sim_data["explanation"]
+    assert "Fushë Kosovë" in sim_data["explanation"]

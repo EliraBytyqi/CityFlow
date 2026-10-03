@@ -65,20 +65,42 @@ class CameraInference:
             if not model_path.is_file():
                 raise FileNotFoundError(f"YOLO model weights not found: {model_path}")
             model = YOLO(str(model_path))
-            capture = cv2.VideoCapture(stream_url)
+            def open_stream():
+                return cv2.VideoCapture(
+                    stream_url,
+                    cv2.CAP_FFMPEG,
+                    [cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10000,
+                     cv2.CAP_PROP_READ_TIMEOUT_MSEC, 10000],
+                )
+
+            capture = open_stream()
             last_ingest = 0.0
+            stream_failures = 0
             while not stop.is_set():
                 if not capture.isOpened():
                     capture.release()
+                    stream_failures += 1
+                    if stream_failures >= 5:
+                        raise RuntimeError(
+                            "Could not open the live HLS stream after 5 attempts. "
+                            "Check the backend server's internet access and that the camera URL is still active."
+                        )
                     time.sleep(1)
-                    capture = cv2.VideoCapture(stream_url)
+                    capture = open_stream()
                     continue
                 ok, frame = capture.read()
                 if not ok or frame is None:
                     capture.release()
+                    stream_failures += 1
+                    if stream_failures >= 5:
+                        raise RuntimeError(
+                            "The HLS stream opened but returned no video frames after 5 attempts. "
+                            "Check FFmpeg/OpenCV support and the camera URL."
+                        )
                     time.sleep(1)
-                    capture = cv2.VideoCapture(stream_url)
+                    capture = open_stream()
                     continue
+                stream_failures = 0
                 prediction = model.predict(frame, conf=0.15, imgsz=640,
                                            classes=[2, 3, 5, 7], verbose=False)[0]
                 class_ids = prediction.boxes.cls.cpu().numpy().astype(int) if prediction.boxes is not None else []
@@ -105,6 +127,7 @@ class CameraInference:
                         db.close()
                     last_ingest = time.monotonic()
         except Exception as error:
+            print(f"[camera inference:{camera_id}] {error}", flush=True)
             with self._lock:
                 if self.camera_id == camera_id:
                     self.status, self.error = "error", str(error)
