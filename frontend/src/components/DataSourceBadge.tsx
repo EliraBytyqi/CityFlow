@@ -23,6 +23,9 @@ export const DataSourceBadge: React.FC<DataSourceBadgeProps> = ({ source = 'demo
   } else if (normalizedSource === 'demo') {
     label = 'DEMO DATA';
     badgeClass = 'badge-demo';
+  } else if (normalizedSource === 'mixed') {
+    label = 'MIXED SOURCES';
+    badgeClass = 'badge-mixed';
   }
 
   return (

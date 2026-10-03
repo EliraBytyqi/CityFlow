@@ -1,73 +1,33 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, BarChart3, GitCompare, Camera, Play, Activity } from 'lucide-react';
+import { LayoutDashboard, BarChart3, GitCompare, Camera, ArrowUpRight, Activity } from 'lucide-react';
 
-interface SidebarProps {
-  onRunDemo?: () => void;
-  isDemoRunning?: boolean;
-}
+interface SidebarProps { onOpenCameras?: () => void; }
 
-export const Sidebar: React.FC<SidebarProps> = ({ onRunDemo, isDemoRunning }) => {
-  return (
-    <aside className="sidebar">
-      {/* Brand Header */}
-      <div className="p-5 border-b border-slate-800 flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 shrink-0">
-          <Activity className="w-5 h-5 text-white" />
-        </div>
-        <div className="logo-text">
-          <div className="text-base font-black text-slate-100 tracking-wider">CITYFLOW AI</div>
-          <div className="text-[10px] font-medium text-slate-400">Decision Support Platform</div>
-        </div>
-      </div>
+const links = [
+  { to: '/', label: 'Map', icon: LayoutDashboard, end: true },
+  { to: '/analytics', label: 'Analyze', icon: BarChart3 },
+  { to: '/scenarios', label: 'Scenarios', icon: GitCompare },
+];
 
-      {/* Navigation Links */}
-      <nav className="flex-1 py-4 flex flex-col gap-1">
-        <NavLink
-          to="/"
-          className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-        >
-          <LayoutDashboard className="w-4 h-4 shrink-0" />
-          <span className="nav-text">Dashboard</span>
+export const Sidebar: React.FC<SidebarProps> = ({ onOpenCameras }) => (
+  <aside className="sidebar" aria-label="Main navigation">
+    <NavLink to="/" className="brand-lockup" aria-label="CityFlow home">
+      <span className="brand-mark"><Activity size={19} strokeWidth={2.4} /></span>
+      <span className="logo-text"><strong>CITYFLOW</strong><small>KOSOVO OBSERVATORY</small></span>
+    </NavLink>
+    <nav className="side-nav">
+      {links.map(({ to, label, icon: Icon, end }) => (
+        <NavLink key={to} to={to} end={end} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+          <Icon size={18} strokeWidth={1.8} /><span className="nav-text">{label}</span>
         </NavLink>
-
-        <NavLink
-          to="/analytics"
-          className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-        >
-          <BarChart3 className="w-4 h-4 shrink-0" />
-          <span className="nav-text">Traffic Analytics</span>
-        </NavLink>
-
-        <NavLink
-          to="/scenarios"
-          className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-        >
-          <GitCompare className="w-4 h-4 shrink-0" />
-          <span className="nav-text">Scenarios</span>
-        </NavLink>
-
-        <NavLink
-          to="/cameras"
-          className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-        >
-          <Camera className="w-4 h-4 shrink-0" />
-          <span className="nav-text">Cameras</span>
-        </NavLink>
-      </nav>
-
-      {/* Hackathon Demo Button */}
-      <div className="p-4 border-t border-slate-800">
-        <button
-          type="button"
-          onClick={onRunDemo}
-          disabled={isDemoRunning}
-          className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-pink-500/20 hover:opacity-95 transition-all disabled:opacity-50"
-        >
-          <Play className="w-4 h-4 fill-current" />
-          <span>{isDemoRunning ? 'DEMO RUNNING...' : 'RUN HACKATHON DEMO'}</span>
-        </button>
-      </div>
-    </aside>
-  );
-};
+      ))}
+    </nav>
+    <div className="sidebar-foot">
+      <button type="button" onClick={onOpenCameras} className="sidebar-cta" aria-label="Open live cameras" title="Open live cameras">
+        <Camera size={16} /><span className="nav-text">Cameras</span><ArrowUpRight size={15} className="nav-text" />
+      </button>
+      <span className="sidebar-version">URBAN WHAT-IF ENGINE</span>
+    </div>
+  </aside>
+);

@@ -24,6 +24,8 @@ import { Clock, Truck, Bus, Car } from 'lucide-react';
 export const TrafficAnalytics: React.FC = () => {
   const [timeline, setTimeline] = useState<TrafficTimeline | null>(null);
   const [roads, setRoads] = useState<Road[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<'total' | 'cars' | 'trucks' | 'buses' | 'motorcycles'>('total');
 
   useEffect(() => {
@@ -36,7 +38,9 @@ export const TrafficAnalytics: React.FC = () => {
         setTimeline(tl);
         setRoads(rData);
       } catch (err) {
-        console.error('Failed to load analytics data:', err);
+        setLoadError(err instanceof Error ? err.message : 'Could not load traffic analytics.');
+      } finally {
+        setIsLoading(false);
       }
     };
     fetchData();
@@ -44,11 +48,11 @@ export const TrafficAnalytics: React.FC = () => {
 
   if (!timeline) {
     return (
-      <div className="flex flex-col min-h-screen">
-        <Header title="TRAFFIC ANALYTICS" subtitle="24-Hour Traffic Observation & Breakdown" />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="loading-spinner" />
-        </div>
+      <div className="page-view analytics-view">
+        <Header title="Traffic patterns" subtitle="Hourly volume and vehicle mix across configured camera locations." />
+        <main className="page-shell"><div className={loadError ? 'notice notice-error' : 'panel empty-state'} role={loadError ? 'alert' : undefined}>
+          {loadError ? loadError : isLoading ? <><div className="loading-spinner" /> Loading traffic observations…</> : 'No traffic observations are available yet.'}
+        </div></main>
       </div>
     );
   }
@@ -73,19 +77,19 @@ export const TrafficAnalytics: React.FC = () => {
 
   const getFilterColor = () => {
     switch (activeFilter) {
-      case 'cars': return '#6366f1';
-      case 'trucks': return '#f59e0b';
-      case 'buses': return '#06b6d4';
-      case 'motorcycles': return '#ec4899';
-      default: return '#8b5cf6';
+      case 'cars': return '#39775d';
+      case 'trucks': return '#bd7b37';
+      case 'buses': return '#397d87';
+      case 'motorcycles': return '#a65b6c';
+      default: return '#39775d';
     }
   };
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="page-view analytics-view flex flex-col min-h-screen">
       <Header
-        title="TRAFFIC ANALYTICS"
-        subtitle="24-Hour Traffic Volume & Vehicle Composition"
+        title="Traffic patterns"
+        subtitle="Hourly volume and vehicle mix across configured camera locations."
         dataSource={timeline.data_source}
       />
 
@@ -118,7 +122,7 @@ export const TrafficAnalytics: React.FC = () => {
               {totalCars.toLocaleString()}
             </div>
             <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
-              <div className="bg-indigo-500 h-full" style={{ width: `${(totalCars / grandTotal) * 100}%` }} />
+              <div className="bg-indigo-500 h-full" style={{ width: `${(totalCars / grandTotal) * 100}%`, backgroundColor: '#39775d' }} />
             </div>
           </div>
 
@@ -168,7 +172,7 @@ export const TrafficAnalytics: React.FC = () => {
                 <DataSourceBadge source={timeline.data_source} />
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Hourly vehicle count aggregated across all active AI monitoring points
+                Hourly counts from the selected source; demo values are clearly marked.
               </p>
             </div>
 
@@ -206,10 +210,10 @@ export const TrafficAnalytics: React.FC = () => {
                 <YAxis tickLine={false} stroke="#64748b" />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#0f172a',
-                    borderColor: 'rgba(99,102,241,0.2)',
-                    borderRadius: '12px',
-                    color: '#f8fafc',
+                    backgroundColor: '#fffefa',
+                    borderColor: '#dce3db',
+                    borderRadius: '8px',
+                    color: '#203027',
                   }}
                 />
                 <Area
@@ -231,7 +235,7 @@ export const TrafficAnalytics: React.FC = () => {
           <div className="glass-card p-6 rounded-2xl flex flex-col gap-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
-                TRAFFIC BY ROAD (DAILY VOLUME)
+                TRAFFIC BY LINK (DAILY BASELINE)
               </h3>
               <span className="text-xs text-slate-400">{roads.length} Monitored Corridors</span>
             </div>
@@ -264,7 +268,7 @@ export const TrafficAnalytics: React.FC = () => {
               <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
                 VEHICLE CLASSIFICATION BREAKDOWN
               </h3>
-              <span className="text-xs text-slate-400">AI Detection Distribution</span>
+              <span className="text-xs text-slate-400">Vehicle mix by hour</span>
             </div>
 
             <div className="h-[280px] w-full pt-2">
@@ -275,16 +279,16 @@ export const TrafficAnalytics: React.FC = () => {
                   <YAxis stroke="#64748b" />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: '#0f172a',
-                      borderColor: 'rgba(99,102,241,0.2)',
-                      borderRadius: '12px',
+                      backgroundColor: '#fffefa',
+                      borderColor: '#dce3db',
+                      borderRadius: '8px',
                     }}
                   />
                   <Legend />
-                  <Bar dataKey="cars" name="Cars" stackId="a" fill="#6366f1" />
-                  <Bar dataKey="trucks" name="Trucks" stackId="a" fill="#f59e0b" />
-                  <Bar dataKey="buses" name="Buses" stackId="a" fill="#06b6d4" />
-                  <Bar dataKey="motorcycles" name="Motorcycles" stackId="a" fill="#ec4899" />
+                  <Bar dataKey="cars" name="Cars" stackId="a" fill="#39775d" />
+                  <Bar dataKey="trucks" name="Trucks" stackId="a" fill="#bd7b37" />
+                  <Bar dataKey="buses" name="Buses" stackId="a" fill="#397d87" />
+                  <Bar dataKey="motorcycles" name="Motorcycles" stackId="a" fill="#a65b6c" />
                 </BarChart>
               </ResponsiveContainer>
             </div>

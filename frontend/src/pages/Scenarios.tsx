@@ -9,26 +9,25 @@ export const Scenarios: React.FC = () => {
   const [roads, setRoads] = useState<Road[]>([]);
   const [selectedRoadId, setSelectedRoadId] = useState<string>('road_01');
   const [comparison, setComparison] = useState<CompareResult | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     getRoads().then((rData) => {
       setRoads(rData);
       if (rData.length > 0) {
-        const defaultRoad = rData.find((r) => r.name.toLowerCase().includes('weststraat')) || rData[0];
-        setSelectedRoadId(defaultRoad.id);
+        setSelectedRoadId(rData[0].id);
       }
-    });
+    }).catch((error: Error) => setLoadError(error.message));
   }, []);
 
   useEffect(() => {
     if (!selectedRoadId) return;
-    setIsLoading(true);
     compareSimulations(selectedRoadId, [25, 50, 75, 100], 8)
       .then((res) => setComparison(res))
-      .catch((err) => console.error('Comparison failed:', err))
-      .finally(() => setIsLoading(false));
+      .catch((err: Error) => setLoadError(err.message))
   }, [selectedRoadId]);
+
+  const isLoading = roads.length === 0 && !loadError || Boolean(selectedRoadId && comparison?.road_id !== selectedRoadId && !loadError);
 
   const chartData = comparison?.scenarios.map((s) => ({
     closure: `${s.closure_percentage}% Closure`,
@@ -39,13 +38,15 @@ export const Scenarios: React.FC = () => {
   }));
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="page-view scenarios-view flex flex-col min-h-screen">
       <Header
-        title="SCENARIO COMPARISON"
-        subtitle="Evaluate trade-offs across closure levels and multi-street configurations"
+        title="Closure planner"
+        subtitle="Compare modeled traffic impacts across closure levels."
       />
 
       <main className="p-8 flex flex-col gap-6 flex-1 max-w-[1600px] w-full mx-auto">
+        <div className="scenario-note"><span className="eyebrow">MODEL SCOPE</span><span>Illustrative sample network and baseline volumes—not a surveyed Kosovo street graph.</span><DataSourceBadge source="demo" /></div>
+        {loadError && <div role="alert" className="notice notice-error"><AlertCircle size={16} /> {loadError}</div>}
         {/* Road Selector Bar */}
         <div className="glass-card p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -54,16 +55,16 @@ export const Scenarios: React.FC = () => {
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
-                SELECT ROAD TO COMPARE
+                SELECT NETWORK LINK
               </h3>
-              <p className="text-xs text-slate-400">Side-by-side analysis of 25%, 50%, 75%, and 100% closure levels</p>
+              <p className="text-xs text-slate-400">Compare the modeled effect at four closure levels.</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <select
               value={selectedRoadId}
-              onChange={(e) => setSelectedRoadId(e.target.value)}
+              onChange={(e) => { setLoadError(null); setComparison(null); setSelectedRoadId(e.target.value); }}
               className="bg-slate-900 text-slate-100 border border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 w-full sm:w-[260px]"
             >
               {roads.map((r) => (
@@ -81,7 +82,7 @@ export const Scenarios: React.FC = () => {
             <div className="loading-spinner" />
           </div>
         ) : comparison ? (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-fade-in">
+          <div className="scenario-outcomes grid grid-cols-1 md:grid-cols-4 gap-4 animate-fade-in">
             {comparison.scenarios.map((sc) => (
               <div
                 key={sc.closure_percentage}
@@ -134,7 +135,7 @@ export const Scenarios: React.FC = () => {
               </div>
             ))}
           </div>
-        ) : null}
+        ) : !loadError ? <div className="panel empty-state"><GitCompare size={22} /><strong>No scenario results yet</strong><span>Choose a network link to compare closure levels.</span></div> : null}
 
         {/* Trade-Off Comparison Chart */}
         {chartData && (
@@ -152,18 +153,18 @@ export const Scenarios: React.FC = () => {
             <div className="h-[300px] w-full pt-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e3e7df" />
                   <XAxis dataKey="closure" stroke="#64748b" />
                   <YAxis stroke="#64748b" />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: '#0f172a',
-                      borderColor: 'rgba(99,102,241,0.2)',
-                      borderRadius: '12px',
+                      backgroundColor: '#fffefa',
+                      borderColor: '#dce3db',
+                      borderRadius: '8px',
                     }}
                   />
-                  <Bar dataKey="displaced" name="Displaced Vehicles" fill="#6366f1" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="delay" name="Avg Delay %" fill="#f59e0b" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="displaced" name="Displaced Vehicles" fill="#39775d" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="delay" name="Avg Delay %" fill="#bd7b37" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

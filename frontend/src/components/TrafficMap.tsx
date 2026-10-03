@@ -1,5 +1,4 @@
-import React, { useEffect, useRef } from 'react';
-import L from 'leaflet';
+import React, { useMemo, useState } from 'react';
 import { type Road, type Camera, type AffectedRoad } from '../services/api';
 
 interface TrafficMapProps {
@@ -9,14 +8,15 @@ interface TrafficMapProps {
   onSelectRoad: (roadId: string) => void;
   simulationResults?: AffectedRoad[] | null;
   closureRoadId?: string | null;
+  closurePercentage?: number | null;
 }
 
-const getUtilizationColor = (utilization: number, isClosed: boolean = false): string => {
-  if (isClosed) return '#6b7280'; // gray for closed
-  if (utilization < 0.50) return '#22c55e'; // GREEN
-  if (utilization < 0.75) return '#eab308'; // YELLOW
-  if (utilization < 0.90) return '#f97316'; // ORANGE
-  return '#ef4444'; // RED
+const loadColor = (utilization: number, closed: boolean) => {
+  if (closed) return '#a8a69e';
+  if (utilization < 0.5) return '#668c72';
+  if (utilization < 0.75) return '#ab9547';
+  if (utilization < 0.9) return '#b16d3d';
+  return '#ad5550';
 };
 
 export const TrafficMap: React.FC<TrafficMapProps> = ({
@@ -26,202 +26,105 @@ export const TrafficMap: React.FC<TrafficMapProps> = ({
   onSelectRoad,
   simulationResults,
   closureRoadId,
+  closurePercentage,
 }) => {
-  const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<L.Map | null>(null);
-  const layersRef = useRef<L.LayerGroup | null>(null);
-
-  // Initialize Leaflet map
-  useEffect(() => {
-    if (!mapRef.current || mapInstanceRef.current) return;
-
-    // Centered around our demo city (Delft-like coordinates: 52.013, 4.358)
-    const map = L.map(mapRef.current, {
-      center: [52.013, 4.358],
-      zoom: 14,
-      zoomControl: true,
-      attributionControl: false,
+  const [xRay, setXRay] = useState(true);
+  const simulationByRoad = useMemo(() => new Map((simulationResults ?? []).map((road) => [road.road_id, road])), [simulationResults]);
+  const geometry = useMemo(() => {
+    const points = roads.flatMap((road) => road.geometry ?? []).filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat));
+    if (!points.length) return new Map<string, string>();
+    const minLng = Math.min(...points.map(([lng]) => lng));
+    const maxLng = Math.max(...points.map(([lng]) => lng));
+    const minLat = Math.min(...points.map(([, lat]) => lat));
+    const maxLat = Math.max(...points.map(([, lat]) => lat));
+    const lngRange = maxLng - minLng || 1;
+    const latRange = maxLat - minLat || 1;
+    return new Map(roads.flatMap((road) => {
+      if (!road.geometry || road.geometry.length < 2) return [];
+      const path = road.geometry.map(([lng, lat], index) => {
+        const x = 78 + ((lng - minLng) / lngRange) * 844;
+        const y = 68 + ((maxLat - lat) / latRange) * 564;
+        return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+      }).join(' ');
+      return [[road.id, path] as const];
+    }));
+  }, [roads]);
+  const nodePositions = useMemo(() => {
+    const nodes = new Map<string, [number, number]>();
+    roads.flatMap((road) => road.geometry ?? []).forEach(([lng, lat]) => {
+      nodes.set(`${lng.toFixed(5)},${lat.toFixed(5)}`, [lng, lat]);
     });
-
-    // Dark tile layer (CartoDB Dark Matter)
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-      subdomains: 'abcd',
-    }).addTo(map);
-
-    const layerGroup = L.layerGroup().addTo(map);
-    layersRef.current = layerGroup;
-    mapInstanceRef.current = map;
-
-    return () => {
-      map.remove();
-      mapInstanceRef.current = null;
-    };
-  }, []);
-
-  // Update map polylines & markers when props change
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    const layerGroup = layersRef.current;
-    if (!map || !layerGroup) return;
-
-    layerGroup.clearLayers();
-
-    // Create lookup for simulation outputs
-    const simMap = new Map<string, AffectedRoad>();
-    if (simulationResults) {
-      simulationResults.forEach((r) => simMap.set(r.road_id, r));
-    }
-
-    // Render Roads
-    roads.forEach((road) => {
-      if (!road.geometry || road.geometry.length < 2) return;
-
-      // Leaflet expects [lat, lng] array
-      const latLngs: L.LatLngExpression[] = road.geometry.map(([lng, lat]) => [lat, lng]);
-
-      const isSelected = road.id === selectedRoadId;
-      const isClosed = road.id === closureRoadId;
-      const simData = simMap.get(road.id);
-
-      let utilization = road.utilization;
-      let status = road.status;
-
-      if (simData) {
-        utilization = simData.utilization;
-        status = simData.status;
-      }
-
-      const strokeColor = isClosed ? '#6b7280' : getUtilizationColor(utilization, status === 'closed');
-      const strokeWidth = isSelected ? 8 : 5;
-      const opacity = isSelected ? 1.0 : 0.8;
-
-      const polyline = L.polyline(latLngs, {
-        color: strokeColor,
-        weight: strokeWidth,
-        opacity: opacity,
-        dashArray: isClosed ? '8, 8' : undefined,
-        lineCap: 'round',
-        lineJoin: 'round',
-      });
-
-      // Hover and click interactions
-      polyline.on('click', () => {
-        onSelectRoad(road.id);
-      });
-
-      polyline.on('mouseover', (e) => {
-        const layer = e.target;
-        layer.setStyle({ weight: strokeWidth + 3, opacity: 1.0 });
-      });
-
-      polyline.on('mouseout', (e) => {
-        const layer = e.target;
-        layer.setStyle({ weight: strokeWidth, opacity: opacity });
-      });
-
-      // Tooltip / Popup content
-      const popupContent = `
-        <div style="font-family: 'Inter', sans-serif;">
-          <div style="font-weight: 700; font-size: 14px; margin-bottom: 4px;">${road.name}</div>
-          <div style="color: #94a3b8; font-size: 12px; margin-bottom: 6px;">ID: ${road.id} | ${road.road_type.toUpperCase()}</div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-            <span>Flow:</span>
-            <span style="font-weight: 600;">${simData ? simData.after_flow : road.current_flow} veh/hr</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-            <span>Capacity:</span>
-            <span style="font-weight: 600;">${road.capacity} veh/hr</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-            <span>Utilization:</span>
-            <span style="font-weight: 700; color: ${strokeColor};">${Math.round(utilization * 100)}%</span>
-          </div>
-          ${
-            simData && simData.change_percent !== 0
-              ? `<div style="font-size: 11px; padding: 4px 6px; border-radius: 4px; background: rgba(99,102,241,0.1); color: #818cf8; text-align: center; margin-top: 6px;">
-                   Traffic Change: ${simData.change_percent > 0 ? '+' : ''}${simData.change_percent}%
-                 </div>`
-              : ''
-          }
-        </div>
-      `;
-
-      polyline.bindPopup(popupContent);
-      layerGroup.addLayer(polyline);
-
-      // Selected road glow highlight ring
-      if (isSelected) {
-        const glowPolyline = L.polyline(latLngs, {
-          color: '#6366f1',
-          weight: strokeWidth + 6,
-          opacity: 0.3,
-        });
-        layerGroup.addLayer(glowPolyline);
-      }
-    });
-
-    // Render Camera Markers
-    cameras.forEach((cam) => {
-      const cameraIcon = L.divIcon({
-        className: 'custom-camera-icon',
-        html: `
-          <div style="
-            width: 26px;
-            height: 26px;
-            background: rgba(17, 24, 39, 0.9);
-            border: 2px solid #06b6d4;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
-            color: #06b6d4;
-            font-size: 12px;
-          ">
-            📷
-          </div>
-        `,
-        iconSize: [26, 26],
-        iconAnchor: [13, 13],
-      });
-
-      const marker = L.marker([cam.latitude, cam.longitude], { icon: cameraIcon });
-      marker.bindPopup(`
-        <div style="font-family: 'Inter', sans-serif;">
-          <div style="font-weight: 700; color: #06b6d4;">${cam.name}</div>
-          <div style="font-size: 11px; color: #94a3b8;">${cam.id} — ONLINE</div>
-          <div style="margin-top: 4px; font-size: 12px;">Road: ${cam.road_name || cam.road_id || 'N/A'}</div>
-          ${cam.vehicles_per_hour ? `<div style="font-size: 12px; font-weight: 600; margin-top: 2px;">Peak: ${cam.vehicles_per_hour} veh/hr</div>` : ''}
-        </div>
-      `);
-      layerGroup.addLayer(marker);
-    });
-  }, [roads, cameras, selectedRoadId, simulationResults, closureRoadId, onSelectRoad]);
+    const points = [...nodes.values()];
+    if (!points.length) return [];
+    const minLng = Math.min(...points.map(([lng]) => lng));
+    const maxLng = Math.max(...points.map(([lng]) => lng));
+    const minLat = Math.min(...points.map(([, lat]) => lat));
+    const maxLat = Math.max(...points.map(([, lat]) => lat));
+    return points.map(([lng, lat]) => ({
+      x: 78 + ((lng - minLng) / (maxLng - minLng || 1)) * 844,
+      y: 68 + ((maxLat - lat) / (maxLat - minLat || 1)) * 564,
+      key: `${lng}-${lat}`,
+    }));
+  }, [roads]);
 
   return (
-    <div className="map-container relative h-full min-h-[450px]">
-      <div ref={mapRef} className="w-full h-full min-h-[450px]" />
-
-      {/* Map Legend Overlay */}
-      <div className="absolute bottom-4 left-4 z-[1000] glass-card p-3 text-xs flex flex-col gap-1.5 backdrop-blur-md bg-slate-900/80 border border-slate-700/50 rounded-xl">
-        <div className="font-semibold text-slate-300 mb-1">UTILIZATION KEY</div>
-        <div className="flex items-center gap-2 text-slate-400">
-          <span className="w-3 h-3 rounded-full bg-[#22c55e]" /> &lt;50% (Low)
-        </div>
-        <div className="flex items-center gap-2 text-slate-400">
-          <span className="w-3 h-3 rounded-full bg-[#eab308]" /> 50–75% (Moderate)
-        </div>
-        <div className="flex items-center gap-2 text-slate-400">
-          <span className="w-3 h-3 rounded-full bg-[#f97316]" /> 75–90% (High)
-        </div>
-        <div className="flex items-center gap-2 text-slate-400">
-          <span className="w-3 h-3 rounded-full bg-[#ef4444]" /> &gt;90% (Critical)
-        </div>
-        <div className="flex items-center gap-2 text-slate-400">
-          <span className="w-3 h-1 bg-[#6b7280] rounded" /> Closed / Blocked
-        </div>
+    <div className={`network-map ${xRay ? 'xray-mode' : 'traffic-mode'}`}>
+      <div className="network-map-grid" aria-hidden="true" />
+      <div className="network-map-tools" role="group" aria-label="Network visualization mode">
+        <span>VIEW</span>
+        <button type="button" aria-pressed={!xRay} onClick={() => setXRay(false)}>TRAFFIC</button>
+        <button type="button" aria-pressed={xRay} onClick={() => setXRay(true)}>X-RAY</button>
       </div>
+      {roads.length === 0 || geometry.size === 0 ? (
+        <div className="network-map-empty" role="status">Schematic network is loading or unavailable.</div>
+      ) : (
+        <svg className="network-svg" viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid slice" role="img" aria-label={`Schematic network with ${roads.length} links and ${cameras.length} configured camera feeds`}>
+          <defs>
+            <filter id="road-halo" x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur stdDeviation="5" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+            <filter id="particle-halo" x="-300%" y="-300%" width="700%" height="700%">
+              <feGaussianBlur stdDeviation="2.5" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+          </defs>
+          <g className="network-lines">
+            {roads.map((road) => {
+              const path = geometry.get(road.id);
+              if (!path) return null;
+              const simulated = simulationByRoad.get(road.id);
+              const utilization = simulated?.utilization ?? road.utilization;
+              const closurePct = road.id === closureRoadId ? (closurePercentage ?? 100) : 0;
+              const closed = (closurePct >= 100 && road.id === closureRoadId) || simulated?.status === 'closed';
+              const closureOpacity = road.id === closureRoadId ? Math.max(.045, 1 - closurePct / 105) : 1;
+              const color = loadColor(utilization, closed);
+              const selected = road.id === selectedRoadId;
+              const flow = simulated?.after_flow ?? road.current_flow;
+              const particleCount = closed ? 0 : Math.max(1, Math.min(5, Math.round((flow / 650) * (1 - closurePct / 100))));
+              const duration = Math.max(3, 15 - (Math.min(flow / Math.max(road.capacity, 1), 1.4) * 7));
+              return (
+                <g key={road.id} className={`network-link ${selected ? 'is-selected' : ''} ${closed ? 'is-closed' : ''}`} onClick={() => onSelectRoad(road.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelectRoad(road.id); } }} role="button" tabIndex={0} aria-label={`${road.name}, ${Math.round(utilization * 100)} percent utilization${closed ? ', modeled closed' : ''}`}>
+                  <title>{road.name} · {Math.round(utilization * 100)}% utilization{simulated ? ` · modeled flow ${simulated.after_flow}` : ''}</title>
+                  {selected && <path d={path} className="link-selected-halo" />}
+                  <path id={`flow-${road.id}`} d={path} className="link-halo" stroke={color} style={{ opacity: .17 * closureOpacity }} />
+                  <path d={path} className="link-core" stroke={color} style={{ opacity: .82 * closureOpacity }} />
+                  {particleCount > 0 && Array.from({ length: particleCount }, (_, index) => (
+                  <circle key={`${road.id}-particle-${index}`} className="flow-particle" r={selected ? 2.8 : 2.2} fill={selected ? '#315c4c' : color}>
+                      <animateMotion dur={`${duration.toFixed(1)}s`} begin={`${-(duration * index / particleCount).toFixed(1)}s`} repeatCount="indefinite" rotate="auto">
+                        <mpath href={`#flow-${road.id}`} />
+                      </animateMotion>
+                    </circle>
+                  ))}
+                </g>
+              );
+            })}
+          </g>
+          <g className="network-nodes" aria-hidden="true">
+            {nodePositions.map(({ x, y, key }) => <g key={key} transform={`translate(${x},${y})`}><circle r="9" className="node-halo" /><circle r="3.5" className="network-node" /></g>)}
+          </g>
+        </svg>
+      )}
     </div>
   );
 };

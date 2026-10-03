@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Header } from '../components/Header';
-import { DataSourceBadge } from '../components/DataSourceBadge';
 import {
   getCameras, getCameraDetail, getCameraInference, startCameraInference,
   stopCameraInference, getCameraInferenceVideoUrl, type Camera, type CameraDetail, type CameraInference,
 } from '../services/api';
-import { Camera as CameraIcon, CheckCircle2, X } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { ArrowRight, Camera as CameraIcon, Check, CircleAlert, LoaderCircle, X } from 'lucide-react';
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+
+const stateCopy: Record<CameraInference['status'], string> = {
+  stopped: 'Model stopped', connecting: 'Starting model', live: 'Inference running', error: 'Needs attention',
+};
 
 export const Cameras: React.FC = () => {
   const [cameras, setCameras] = useState<Camera[]>([]);
@@ -14,17 +17,31 @@ export const Cameras: React.FC = () => {
   const [cameraDetail, setCameraDetail] = useState<CameraDetail | null>(null);
   const [inference, setInference] = useState<CameraInference | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [isLoadingCameras, setIsLoadingCameras] = useState(true);
 
   useEffect(() => {
-    getCameras().then(setCameras).catch((error) => setLoadError(error.message));
+    let cancelled = false;
+    getCameras().then((data) => { if (!cancelled) setCameras(data.filter((camera) => camera.stream_url)); })
+      .catch((error: Error) => { if (!cancelled) setLoadError(error.message); })
+      .finally(() => { if (!cancelled) setIsLoadingCameras(false); });
+    return () => { cancelled = true; };
   }, []);
 
   const closeCamera = useCallback(() => {
     if (selectedCameraId) void stopCameraInference(selectedCameraId).catch(() => undefined);
-    setSelectedCameraId(null);
-    setCameraDetail(null);
-    setInference(null);
+    setSelectedCameraId(null); setCameraDetail(null); setInference(null); setLoadError(null);
   }, [selectedCameraId]);
+
+  const selectCamera = (cameraId: string) => {
+    if (cameraId === selectedCameraId) {
+      setLoadError(null);
+      startCameraInference(cameraId).then(setInference)
+        .catch((error: Error) => setLoadError(error.message));
+      return;
+    }
+    setCameraDetail(null); setInference(null); setLoadError(null);
+    setSelectedCameraId(cameraId);
+  };
 
   useEffect(() => () => {
     if (selectedCameraId) void stopCameraInference(selectedCameraId).catch(() => undefined);
@@ -34,70 +51,74 @@ export const Cameras: React.FC = () => {
     if (!selectedCameraId) return;
     const cameraId = selectedCameraId;
     let cancelled = false;
-    setCameraDetail(null);
-    setInference(null);
-    setLoadError(null);
     Promise.all([getCameraDetail(cameraId), startCameraInference(cameraId)])
-      .then(([detail, state]) => {
-        if (!cancelled) {
-          setCameraDetail(detail);
-          setInference(state);
-        }
-      })
-      .catch((error) => { if (!cancelled) setLoadError(error.message); });
+      .then(([detail, state]) => { if (!cancelled) { setCameraDetail(detail); setInference(state); } })
+      .catch((error: Error) => { if (!cancelled) setLoadError(error.message); });
     const poll = window.setInterval(() => {
       getCameraInference(cameraId).then((state) => { if (!cancelled) setInference(state); })
-        .catch(() => undefined);
-    }, 2000);
+        .catch((error: Error) => { if (!cancelled) setLoadError(error.message); });
+    }, 1500);
     return () => { cancelled = true; window.clearInterval(poll); };
   }, [selectedCameraId]);
 
-  return (
-    <div className="flex flex-col min-h-screen">
-      <Header title="AI CAMERA MONITORS" subtitle="Live traffic video and vehicle detection from deployed cameras" />
-      <main className="p-8 flex flex-col gap-6 flex-1 max-w-[1600px] w-full mx-auto">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-          <div>
-            <h2 className="text-lg font-bold text-slate-100 uppercase tracking-wide">LIVE VEHICLE DETECTION CAMERAS ({cameras.filter((camera) => camera.stream_url).length})</h2>
-            <p className="text-xs text-slate-400">Select a camera to open its live feed and start YOLO vehicle predictions.</p>
-          </div>
-          <DataSourceBadge source="observed" />
-        </div>
-        {loadError && <p role="alert" className="text-sm text-rose-300">{loadError}</p>}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {cameras.filter((cam) => cam.stream_url).map((cam) => (
-            <button key={cam.id} type="button" onClick={() => setSelectedCameraId(cam.id)}
-              className={`glass-card text-left p-5 rounded-2xl flex flex-col gap-3 cursor-pointer border transition-all ${selectedCameraId === cam.id ? 'border-cyan-500/50 bg-cyan-950/20 shadow-lg shadow-cyan-500/10' : 'border-slate-800 hover:border-slate-700'}`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2"><div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"><CameraIcon className="w-4 h-4" /></div><span className="text-xs font-mono font-bold text-slate-300">{cam.id}</span></div>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> {cam.stream_url ? 'READY' : 'NO FEED'}</span>
-              </div>
-              <div className="text-sm font-bold text-slate-100 mt-1">{cam.name}</div>
-              <div className="text-xs text-slate-400">Live traffic camera</div>
-              <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-800/60 mt-1">
-                <div><span className="text-slate-500 text-[10px] uppercase">Daily Flow</span><div className="font-mono font-bold text-slate-200">{cam.latest_count ? cam.latest_count.toLocaleString() : '---'}</div></div>
-                <div><span className="text-slate-500 text-[10px] uppercase">Peak Hour</span><div className="font-mono font-bold text-cyan-400">{cam.peak_hour !== null ? `${cam.peak_hour.toString().padStart(2, '0')}:00` : '---'}</div></div>
-              </div>
-            </button>
-          ))}
-        </div>
+  const live = inference?.status === 'live';
+  const hasError = inference?.status === 'error';
 
-        {selectedCameraId && (
-          <section className="glass-card p-6 rounded-2xl border border-cyan-500/30 flex flex-col gap-4 animate-fade-in relative">
-            <button type="button" aria-label="Close camera" onClick={closeCamera} className="absolute top-4 right-4 z-10 text-slate-400 hover:text-slate-100"><X className="w-5 h-5" /></button>
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 pr-8">
-              <div className="flex items-center gap-3"><div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"><CameraIcon className="w-5 h-5" /></div><div><h3 className="text-base font-bold text-slate-100">{cameraDetail?.name ?? 'Opening camera…'}</h3><p className="text-xs text-slate-400">Live location feed</p></div></div>
-              <span className={`text-xs font-semibold ${inference?.status === 'live' ? 'text-emerald-400' : inference?.status === 'error' ? 'text-rose-400' : 'text-amber-300'}`}>MODEL {inference?.status?.toUpperCase() ?? 'STARTING'}</span>
-            </div>
-            {cameraDetail?.stream_url && <div className="overflow-hidden rounded-xl bg-black"><img key={selectedCameraId} src={getCameraInferenceVideoUrl(selectedCameraId)} alt={`Live video with vehicle detection boxes for ${cameraDetail.name}`} className="block w-full max-h-[65vh] object-contain" /><p className="px-3 py-2 text-xs text-slate-400">Live model output · detected vehicles are outlined and labeled on each frame</p></div>}
-            {inference?.error && <p role="alert" className="text-sm text-rose-300">Prediction error: {inference.error}. Check that the backend has the YOLO dependencies and yolo11m.pt model file.</p>}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              {[['Vehicles', inference?.total], ['Cars', inference?.counts.cars], ['Trucks', inference?.counts.trucks], ['Buses', inference?.counts.buses], ['Motorcycles', inference?.counts.motorcycles]].map(([label, value]) => <div key={String(label)} className="rounded-xl bg-slate-900/60 border border-slate-800 p-3"><div className="text-[10px] uppercase text-slate-500">{label}</div><div className="font-mono font-bold text-cyan-300">{value ?? '—'}</div></div>)}
-            </div>
-            {inference?.updated_at && <p className="text-[11px] text-slate-500">Latest prediction: {new Date(inference.updated_at).toLocaleTimeString()}</p>}
-            {cameraDetail && <><DataSourceBadge source={cameraDetail.data_source} /><div className="h-[260px] w-full pt-2"><ResponsiveContainer width="100%" height="100%"><AreaChart data={cameraDetail.hourly_data.map((h) => ({ hourStr: `${h.hour.toString().padStart(2, '0')}:00`, ...h }))}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" /><XAxis dataKey="hourStr" stroke="#64748b" /><YAxis stroke="#64748b" /><Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: 'rgba(6,182,212,0.3)', borderRadius: '12px' }} /><Area type="monotone" dataKey="total" stroke="#06b6d4" fill="rgba(6,182,212,0.15)" strokeWidth={3} /></AreaChart></ResponsiveContainer></div></>}
+  return (
+    <div className="page-view cameras-view">
+      <Header title="Live camera desk" subtitle="Choose a location. The backend runs YOLO and returns annotated frames." dataSource={live ? 'observed' : 'demo'} />
+      <main className="page-shell camera-page-shell">
+        <section className="camera-intro">
+          <div><div className="eyebrow">FIELD MONITORING <span className="camera-count">/ {cameras.length || '—'} LOCATIONS</span></div><h2>What’s moving<br /><em>on the ground?</em></h2><p>Open a feed to inspect live detections. Select another location at any time to switch the model.</p></div>
+          <div className="camera-intro-mark"><span>YOLO</span><strong>ON</strong><small>ON DEMAND</small></div>
+        </section>
+
+        {loadError && !selectedCameraId && <div role="alert" className="notice notice-error"><CircleAlert size={16} /> Could not load camera locations: {loadError}</div>}
+
+        <section className="camera-workspace">
+          <div className="camera-selector panel">
+            <div className="panel-heading"><div><div className="eyebrow">CAMERA LOCATIONS</div><h3>Choose a feed</h3></div><span className="selector-count">{cameras.length.toString().padStart(2, '0')} FEEDS</span></div>
+            {isLoadingCameras ? <div className="camera-skeleton" aria-label="Loading camera feeds">{Array.from({ length: 4 }, (_, i) => <span className="skeleton-line" key={i} />)}</div>
+              : cameras.length === 0 ? <div className="empty-state"><CameraIcon size={22} /><strong>No live camera feeds found</strong><span>Confirm the backend is running and camera stream URLs are configured.</span></div>
+                : <div className="camera-choice-list">{cameras.map((camera, index) => (
+                  <button key={camera.id} type="button" onClick={() => selectCamera(camera.id)} aria-pressed={selectedCameraId === camera.id}
+                    className={`camera-choice ${selectedCameraId === camera.id ? 'selected' : ''}`}>
+                    <span className="camera-index">{String(index + 1).padStart(2, '0')}</span>
+                    <span className="camera-choice-icon"><CameraIcon size={17} /></span>
+                    <span className="camera-choice-name">{camera.name}<small>{camera.id}</small></span>
+                    <span className="configured-pill"><span /> READY</span>
+                    <ArrowRight className="choice-arrow" size={15} />
+                  </button>
+                ))}</div>}
+          </div>
+
+          <section className="camera-viewer panel" aria-live="polite">
+            {!selectedCameraId ? <div className="viewer-empty"><div className="viewer-empty-icon"><CameraIcon size={28} /></div><div className="eyebrow">LIVE MODEL OUTPUT</div><h3>Pick a camera to begin</h3><p>Your selected feed will appear here with vehicle boxes and class labels drawn by the model.</p><span className="viewer-hint">No camera is running yet</span></div> : <>
+              <div className="viewer-header"><div className="viewer-title"><div className="eyebrow">{cameraDetail?.id ?? 'CONNECTING'} <span>/ LIVE FEED</span></div><h3>{cameraDetail?.name ?? 'Connecting to camera…'}</h3></div>
+                <div className={`inference-state ${hasError ? 'failed' : live ? 'running' : ''}`}>
+                  {hasError ? <CircleAlert size={14} /> : live ? <Check size={14} /> : <LoaderCircle size={14} className="spin" />}
+                  {inference ? stateCopy[inference.status] : 'Starting model'}
+                </div>
+                <button type="button" onClick={closeCamera} aria-label="Close live camera" className="viewer-close"><X size={18} /></button>
+              </div>
+              <div className={`video-stage ${hasError ? 'video-failed' : ''}`}>
+                {hasError ? <div className="video-message"><CircleAlert size={24} /><strong>We couldn’t read this stream</strong><span>{inference?.error}</span><small>Check the backend terminal for stream or model details, then select this location to retry.</small></div>
+                  : cameraDetail ? <img key={selectedCameraId} src={getCameraInferenceVideoUrl(selectedCameraId)} alt={`Live ${cameraDetail.name} video with YOLO vehicle bounding boxes`} />
+                    : <div className="video-message"><LoaderCircle className="spin" size={22} /><span>Connecting to stream and loading the model…</span></div>}
+                {!hasError && live && <div className="frame-label"><span className="tiny-pulse" /> YOLO DETECTION OUTPUT</div>}
+              </div>
+              {loadError && <div role="alert" className="notice notice-error"><CircleAlert size={16} /> {loadError}</div>}
+              <div className="detection-strip" aria-label="Current vehicle detections">
+                {[['Vehicles', inference?.total], ['Cars', inference?.counts.cars], ['Trucks', inference?.counts.trucks], ['Buses', inference?.counts.buses], ['Motorcycles', inference?.counts.motorcycles]].map(([label, value]) => <div className="detection-metric" key={String(label)}><span>{label}</span><strong>{live ? value ?? 0 : '—'}</strong></div>)}
+              </div>
+              {inference?.updated_at && <p className="frame-time">Last inference frame · {new Date(inference.updated_at).toLocaleTimeString()}</p>}
+              {cameraDetail && <div className="history-block"><div className="history-heading"><div><div className="eyebrow">VOLUME HISTORY</div><h4>{cameraDetail.data_source === 'demo' ? 'Sample hourly baseline' : cameraDetail.data_source === 'mixed' ? 'Baseline + live model counts' : 'Observed hourly counts'}</h4></div><span className={`history-source ${cameraDetail.data_source !== 'observed' ? 'sample' : ''}`}>{cameraDetail.data_source === 'demo' ? 'SAMPLE DATA' : cameraDetail.data_source === 'mixed' ? 'MIXED SOURCES' : 'OBSERVED'}</span></div>
+                {cameraDetail.hourly_data.length ? <div className="history-chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={cameraDetail.hourly_data.map((hour) => ({ ...hour, time: `${String(hour.hour).padStart(2, '0')}:00` }))} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}><CartesianGrid strokeDasharray="2 5" vertical={false} stroke="#e5e9e1" /><XAxis dataKey="time" tickLine={false} axisLine={false} stroke="#79857b" /><YAxis tickLine={false} axisLine={false} stroke="#79857b" /><Tooltip contentStyle={{ backgroundColor: '#fffefa', borderColor: '#dce3db', borderRadius: '8px', color: '#203027' }} /><Area type="monotone" dataKey="total" stroke="#39775d" fill="#dcebe0" strokeWidth={2} /></AreaChart></ResponsiveContainer></div> : <div className="history-empty">No hourly observations yet. Live frame detections will appear above.</div>}
+              </div>}
+            </>}
           </section>
-        )}
+        </section>
+        <p className="camera-footnote">“Ready” means a stream URL is configured. The live status appears only after the model successfully returns its first annotated frame.</p>
       </main>
     </div>
   );

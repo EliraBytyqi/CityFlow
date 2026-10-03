@@ -6,6 +6,7 @@
  */
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_TIMEOUT_MS = 8_000;
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -148,13 +149,26 @@ export interface Scenario {
 // ─── API Functions ──────────────────────────────────────────────────
 
 async function fetchJSON<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  });
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers,
+      },
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('The backend did not respond within 8 seconds. Check that the API is running.');
+    }
+    throw new Error(`Could not reach the backend at ${API_BASE}. Check that the API is running.`);
+  } finally {
+    window.clearTimeout(timeout);
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || 'API Error');
