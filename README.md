@@ -1,163 +1,154 @@
 # CityFlow: Street Closure Impact AI
 
-CityFlow measures traffic from a camera video. It detects and tracks cars, motorcycles, buses, and trucks, then counts each tracked vehicle once when it crosses a counting line or first enters a polygon zone. The saved counts and event data are a computer-vision baseline for later street-closure scenario comparisons; this prototype does not simulate rerouting or predict traffic on other streets.
+CityFlow measures **current vehicle occupancy** in a selected polygonal area of a traffic-camera video. It detects cars, motorcycles, buses, and trucks; tracks them across consecutive frames; and counts the currently visible tracked IDs whose bounding-box centers are inside the polygon. The alert is based only on the current in-area vehicle total. This is a live congestion-risk measurement prototype, not a complete city traffic simulator and it does not model rerouting after a street closure.
 
-## Recommended Windows Folders
+## Recommended Folder Structure
 
-Keep using the Python 3.14 virtual environment already created one directory above this project:
+Keep the existing Python 3.14 virtual environment one level above the project:
 
 ```text
 C:\Users\fjoll\OneDrive\Desktop\Hackathon\
-|-- .venv\                       Existing Python 3.14 environment
-|-- CityFlow\
+|-- .venv\
+`-- CityFlow\
     |-- traffic_counter.py
-    |-- detect_cars.py            Existing occupancy script
+    |-- detect_cars.py
     |-- requirements.txt
     |-- README.md
-    |-- yolo11m.pt                Existing model used by detect_cars.py
-    |-- yolo11n.pt                Downloaded automatically for traffic_counter.py
+    |-- yolo11m.pt
+    |-- yolo11n.pt                 Downloaded automatically when needed
     |-- tests\
-    `-- results\                 Created automatically; each run gets its own folder
+    `-- results\                  Created automatically
+        `-- gjirafa_cam_YYYYMMDD_HHMMSS\
+            |-- annotated.mp4
+            |-- live_counts.csv
+            |-- vehicle_tracks.csv
+            |-- alerts.csv
+            `-- summary.json
 ```
 
-From the `CityFlow` directory, the correct activation command for the existing environment is **`..\.venv\Scripts\Activate.ps1`**. The space in the malformed `..\ .venv` form must not be present. A project-local `.venv` is not needed; keeping the already-created parent environment avoids a second large PyTorch install.
+The provided `yolo11m.pt` remains available to `detect_cars.py`. `traffic_counter.py` defaults to the lighter pretrained `yolo11n.pt`; Ultralytics downloads it on first use if it is not already present. The downloaded weights are ignored by Git.
 
-## Setup
+## Exact PowerShell Setup
 
-Open PowerShell and run:
+Run these commands in order. The activation path is absolute because `.venv` is outside `CityFlow`:
 
 ```powershell
-Set-Location "$HOME\OneDrive\Desktop\Hackathon\CityFlow"
-..\.venv\Scripts\Activate.ps1
+cd "C:\Users\fjoll\OneDrive\Desktop\Hackathon"
+& "C:\Users\fjoll\OneDrive\Desktop\Hackathon\.venv\Scripts\Activate.ps1"
+cd .\CityFlow
 python --version
+where.exe python
+python -c "import torch; print('Torch:', torch.__version__); print('CUDA:', torch.cuda.is_available())"
+python -c "from ultralytics import YOLO; print('Ultralytics works')"
+Test-Path .\traffic_counter.py
 python -m pip install --upgrade pip
 python -m pip install -r .\requirements.txt
 ```
 
-If activation is blocked by PowerShell policy, allow scripts for this PowerShell process only, then activate:
+`where.exe python` is used rather than `where` because PowerShell defines `where` as an alias. The first result should be `C:\Users\fjoll\OneDrive\Desktop\Hackathon\.venv\Scripts\python.exe`. CUDA may report `False`; CPU inference is supported and selected automatically. If PowerShell blocks activation, run this in the current terminal and activate again:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-..\.venv\Scripts\Activate.ps1
+& "C:\Users\fjoll\OneDrive\Desktop\Hackathon\.venv\Scripts\Activate.ps1"
 ```
 
-The requirements install Ultralytics, OpenCV, and NumPy. Ultralytics installs the required PyTorch dependency. Run the commands from the activated environment; do not rely on `yolo.exe`, `torchrun.exe`, or other scripts being on PATH. If dependencies were installed into a different Python environment, installing from this activated terminal puts them in the correct `.venv`.
+Dependencies are installed with `python -m pip`, not standalone command-line executables. `supervision` is included for the existing `detect_cars.py`; the occupancy counter uses Ultralytics tracking, OpenCV, NumPy, and ByteTrack's `lap` dependency.
 
-## Verify Python and Packages
+## Run the Live Stream
 
-Run these checks before inference:
+From the `CityFlow` directory, the camera name is the second positional argument:
 
 ```powershell
-python --version
-where.exe python
-python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
-python -c "from ultralytics import YOLO; print('Ultralytics works')"
-Test-Path .\traffic_counter.py
-(Get-Location).Path
+python .\traffic_counter.py "https://gjirafa-video-live.gjirafa.net/gjvideo-slow/jrl-15u-0vp-6r8/tracks-v1a1/mono.ts.m3u8" gjirafa_cam --show
 ```
 
-The first command should report Python 3.14.x. The first path from `where.exe python` should be `...\Hackathon\.venv\Scripts\python.exe`, and `Test-Path` should return `True`. `torch.cuda.is_available()` may be `False`; that is okay because the script automatically uses CPU when CUDA is unavailable. If `where.exe python` lists a different Python first, reactivate the correct environment.
+`--show` opens the preview. Press `q` to stop. Without a preview, press `Ctrl+C`; the program finishes the current frame and writes the final summary. The stream is opened frame-by-frame, and a failed HLS read triggers up to five reconnection attempts with a three-second delay by default.
 
-## Run a Camera Stream
-
-The requested HLS URL is the default source, so this command works without typing it again:
+## Run a Local MP4
 
 ```powershell
-python .\traffic_counter.py --camera gjirafa_cam --show
+python .\traffic_counter.py ".\videos\traffic.mp4" local_cam --show
 ```
 
-Equivalent explicit URL command:
+The MP4 must exist. Both source and camera name may also be supplied with the supported defaults/options (`--camera` can be used instead of the positional camera name).
+
+## Configure the Monitored Area
+
+The default polygon is defined near the top of `traffic_counter.py`:
+
+```python
+ROI_POLYGON = [(100, 200), (1100, 200), (1200, 700), (50, 700)]
+ALERT_TOTAL_VEHICLES = 15
+ALERT_COOLDOWN_SECONDS = 30.0
+```
+
+Change `ROI_POLYGON` to pixel coordinates that outline the road in your camera image. Every point must fit the video frame. You can override the polygon on the command line using at least three `x,y` pairs:
 
 ```powershell
-python .\traffic_counter.py "https://gjirafa-video-live.gjirafa.net/gjvideo-slow/jrl-15u-0vp-6r8/tracks-v1a1/mono.ts.m3u8" --camera gjirafa_cam --show
+python .\traffic_counter.py ".\videos\traffic.mp4" local_cam --roi 100,200,1100,200,1200,700,50,700 --show
 ```
 
-`--show` opens a preview; press `q` in the preview to stop and finish the summary. Without the preview, press `Ctrl+C` to request a clean stop after the current frame. HLS connection attempts are retried (five attempts by default, three seconds apart). For a slow network, increase `--reconnect-wait` or `--reconnect-attempts`.
+The program uses the **center of each bounding box** for ROI membership. At every frame it rebuilds the current in-area tracker-ID map; an ID no longer visible or whose center leaves the polygon is removed from the current count. There is no line crossing, direction, or cumulative-flow count.
 
-## Run a Local Video
-
-Pass an existing MP4 path instead of the stream URL:
+Useful options:
 
 ```powershell
-python .\traffic_counter.py "C:\path\to\traffic_clip.mp4" --camera local_demo --show
+python .\traffic_counter.py --help
+python .\traffic_counter.py ".\videos\traffic.mp4" local_cam --threshold 15 --model yolo11n.pt --conf 0.35 --output-dir results --show
 ```
 
-Supported local file extensions are `.mp4`, `.avi`, `.mov`, and `.mkv`. Local videos run until the file ends or you stop the preview with `q`.
+`--threshold` sets the current occupancy alert threshold (default 15); `--conf` changes YOLO's detection confidence (default 0.35); `--csv-interval` controls current-count snapshots (default one second); `--model` selects YOLO weights; and `--output-dir` sets the output root. `--device auto` uses CUDA if available and otherwise CPU.
 
-## Counting Line or Polygon Zone
+## What the Display and CSVs Contain
 
-By default, a horizontal line is placed at 60% of the video frame height. Each persistent tracker ID counts once, on its first crossing in either direction:
+The preview and annotated video draw the ROI polygon, class/ID/confidence labels, and current counts for cars, motorcycles, buses, trucks, and the total. Vehicles inside the ROI are green normally and change to a distinct alert color while an alert is active. Detections outside the ROI are drawn gray. A large red `CONGESTION ALERT: N VEHICLES IN AREA` banner appears only while the current in-ROI total meets or exceeds the threshold.
+
+Each run makes a timestamped directory under `results` with:
+
+- `annotated.mp4`: processed video, boxes, labels, ROI, current occupancy, and alert banner.
+- `live_counts.csv`: periodic snapshots with timestamp, frame number, class counts, current total, alert state, and threshold.
+- `vehicle_tracks.csv`: one row for each visible tracked vehicle per frame, including tracker ID, class, confidence, bounding box, center, and `inside_roi`.
+- `alerts.csv`: `ALERT_STARTED`, cooldown `ALERT_REMINDER`, and `ALERT_CLEARED` events with current total and threshold.
+- `summary.json`: source, camera/model/tracker, times, frames processed, maximum concurrent total and per-class occupancy, alert threshold/count, and output paths.
+
+The alert condition is exactly `current_total_vehicles_in_roi >= threshold`. An alert row is written on the NORMAL-to-ALERT transition and then no more often than the configured cooldown. A clear event is written when occupancy falls below the threshold.
+
+## Inspect Results After the Run
+
+Wait until inference has stopped successfully before importing the CSV. From `CityFlow`:
 
 ```powershell
-python .\traffic_counter.py --camera gjirafa_cam --line-position 0.60 --direction any --show
-```
-
-`--direction down` counts only top-to-bottom motion; `--direction up` counts only bottom-to-top motion. To count first entry into a polygon instead, give at least three `x,y` points in video-pixel coordinates:
-
-```powershell
-python .\traffic_counter.py --camera gjirafa_cam --zone 100,250,700,250,760,650,80,650 --show
-```
-
-Coordinates must fit the input frame. To edit the default setup in code, change `DEFAULT_LINE_POSITION` near the top of `traffic_counter.py`; alternatively use the command-line flags above. Polygon mode replaces line mode.
-
-## Tracking, Labels, and Alerts
-
-The script calls Ultralytics `model.track()` once per frame with `persist=True` and `tracker="bytetrack.yaml"`. If `yolo11n.pt` is not already beside the script, Ultralytics downloads the named pretrained weights on first run; the downloaded file is ignored by Git. It filters COCO IDs 2, 3, 5, and 7 (car, motorcycle, bus, truck). The preview/output labels include class, tracker ID, and detection confidence. Persistent IDs are meaningful across consecutive frames in one running video stream; one still image cannot establish persistent identity.
-
-The on-video counters are unique vehicles that crossed the line/entered the zone, grouped by vehicle class, plus the recent vehicles-per-minute rate and alert status. `--alert-total-vehicles` defaults to 45 unique counted IDs and `--alert-vehicles-per-minute` defaults to 45. Set either threshold to `0` to disable that trigger. For example:
-
-```powershell
-python .\traffic_counter.py --camera gjirafa_cam --alert-total-vehicles 30 --alert-vehicles-per-minute 20 --show
-```
-
-Alerts are logged when the alert state starts and then at most once per `--alert-cooldown` seconds while it remains active (30 seconds by default). The annotation includes a red `CONGESTION ALERT` banner while a threshold is active.
-
-## Output Files
-
-Each run creates a timestamped directory under `CityFlow\results`, for example:
-
-```text
-results\gjirafa_cam_20261003_142233\
-|-- annotated.mp4
-|-- vehicle_events.csv
-|-- summary.json
-`-- alerts.csv
-```
-
-- `annotated.mp4`: processed video with boxes, class/ID/confidence labels, counters, line or zone, and alert banner.
-- `vehicle_events.csv`: per-frame detection rows and event type (`detection`, `line_crossing_down`, `line_crossing_up`, or `zone_entry`), with timestamp, frame, tracker ID, class, confidence, and box coordinates.
-- `summary.json`: final frame count, unique counted IDs, totals per vehicle class, alert thresholds, tracker/model, and device.
-- `alerts.csv`: alert timestamp, frame, current total, recent rate, and threshold reason. The file is created with a header even when no alert triggers.
-
-After inference finishes, find the latest folder and check files before reading CSV data:
-
-```powershell
+Get-ChildItem .\results -Recurse
 $run = Get-ChildItem .\results -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-$run.FullName
-Get-ChildItem $run.FullName
-$events = Join-Path $run.FullName 'vehicle_events.csv'
-if (Test-Path $events) { Import-Csv $events | Select-Object -First 20 | Format-Table -AutoSize } else { Write-Warning "Event CSV does not exist: $events" }
+$liveCounts = Join-Path $run.FullName 'live_counts.csv'
+if (Test-Path $liveCounts) { Import-Csv $liveCounts | Format-Table -AutoSize } else { Write-Warning "CSV was not created: $liveCounts" }
 Get-Content (Join-Path $run.FullName 'summary.json') -Raw
 ```
 
-## Tests (No Model or Camera Needed)
+Deactivate the parent environment when finished:
 
-From `CityFlow`, run:
+```powershell
+deactivate
+```
+
+## Tests
+
+The focused tests do not load YOLO or access a camera/stream:
 
 ```powershell
 python -m unittest discover -s tests -v
 python -m py_compile .\traffic_counter.py .\detect_cars.py .\tests\test_project_helpers.py
 ```
 
-The tests cover source parsing, line crossings, polygon geometry, and existing helper behavior without downloading a model or contacting a stream.
+## Troubleshooting and Limitations
 
-## Troubleshooting
+- **`can't open file ... traffic_counter.py`**: first check `(Get-Location).Path`. Change to the project directory with `cd "C:\Users\fjoll\OneDrive\Desktop\Hackathon\CityFlow"`; do not prefix the script with another `CityFlow\` when already inside it.
+- **`ModuleNotFoundError` for Torch or Ultralytics**: activate the parent `.venv` using the absolute activation command above, then run `python -m pip install -r .\requirements.txt`. Confirm `where.exe python` lists that environment first.
+- **Stream cannot open or returns no frames**: verify the `.m3u8` URL is reachable. HLS requires an OpenCV build with FFmpeg support. The program retries a limited number of times and reports the last open/read failure; the remote server/network may deny or interrupt access.
+- **ROI is outside the frame**: adjust `ROI_POLYGON` or pass `--roi` with coordinates matching the camera's actual resolution.
+- **No vehicles counted**: detections are filtered to COCO car, motorcycle, bus, and truck classes, and only tracked bounding-box centers inside the ROI count. Check ROI placement and try adjusting `--conf`.
+- **Tracker IDs change**: IDs persist across consecutive frames while ByteTrack can match the vehicle, but may change after long occlusion, detection failure, stream interruption, or when a vehicle leaves and returns. IDs are object-track labels for this video session, not identities for people, drivers, or license plates.
+- **Missed detections**: a generic COCO model may miss vehicles in darkness, poor weather, unusual camera angles, or tiny distant scenes. Fine-tuning on representative local traffic-camera images could improve accuracy later.
+- **Slow inference or CUDA is false**: the script uses CPU automatically. Try a smaller `--imgsz`, or configure a compatible CUDA-enabled PyTorch build for an NVIDIA GPU.
 
-- **`ModuleNotFoundError: torch` or `ultralytics`**: activate the parent environment from `CityFlow` with `..\.venv\Scripts\Activate.ps1`, then run `python -m pip install -r .\requirements.txt`. Confirm the first `where.exe python` result points inside `Hackathon\.venv`.
-- **`Error: initialization failed`**: run the import checks above in the same activated terminal. This generic startup failure can come from missing packages, a mismatched Python environment, PyTorch DLL/runtime issues, or an OpenCV video backend; use the first printed traceback/error rather than assuming the URL is the cause.
-- **HLS stream fails to open/read**: confirm the URL is reachable in a browser/VLC and remains an `.m3u8` URL. OpenCV needs FFmpeg support for HLS; reinstall the standard `opencv-python` package with `python -m pip install --force-reinstall opencv-python`. The camera/network may block access or expire.
-- **`Could not create output video`**: check free disk space and that `results` is writable. MP4 encoding uses OpenCV's `mp4v` codec.
-- **Very slow or CUDA unavailable**: CPU inference is supported. Use a smaller `--imgsz` such as 416 to reduce work. CUDA requires a compatible NVIDIA driver and PyTorch build; the script does not require a GPU.
-- **Missed or incorrect detections**: a generic COCO model may miss tiny distant vehicles, difficult lighting, occlusions, or unusual camera angles. Later, fine-tune a supported YOLO model with representative local traffic-camera images.
-- **Tracker ID changes**: ByteTrack IDs can change after long occlusion, stream interruption, or when a vehicle leaves and later re-enters. The unique crossing/zone counter deduplicates by tracker ID within a run, not by real-world license plate identity.
-- **No counts in summary**: detections are not counted just because they appear in frames; a tracked vehicle must cross the configured line or enter the zone. Place the line/zone where target vehicles pass and ensure coordinates fit the frame.
+This prototype reports live occupancy and congestion risk in one monitored street area. It does not yet simulate what routes vehicles take when a street is closed; those occupancy measurements can later feed a map/scenario dashboard.

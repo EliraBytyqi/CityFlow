@@ -21,17 +21,53 @@ class ModelPathTests(unittest.TestCase):
 
 
 class PureHelperTests(unittest.TestCase):
-    def test_line_crossings_and_polygon_membership(self):
-        self.assertEqual(traffic_counter.crossing_direction(4, 6, 5), "down")
-        self.assertEqual(traffic_counter.crossing_direction(6, 4, 5), "up")
-        self.assertIsNone(traffic_counter.crossing_direction(4, 4.5, 5))
+    def test_current_roi_occupancy_uses_only_this_frames_inside_tracks(self):
+        polygon = traffic_counter.parse_polygon("0,0,100,0,100,100,0,100")
+        first_frame = [
+            (4, "car", 0.91, (10, 10, 30, 30)),
+            (7, "truck", 0.88, (50, 50, 70, 70)),
+            (9, "motorcycle", 0.95, (150, 150, 170, 170)),
+        ]
+        evaluated, current_tracks, counts = traffic_counter.evaluate_tracks(
+            first_frame, polygon
+        )
+        self.assertEqual(set(current_tracks), {4, 7})
+        self.assertEqual(counts["car"], 1)
+        self.assertEqual(counts["truck"], 1)
+        self.assertEqual(counts["motorcycle"], 0)
+        self.assertFalse(evaluated[2]["inside_roi"])
 
-        polygon = traffic_counter.parse_polygon("0,0,10,0,10,10,0,10")
-        self.assertTrue(traffic_counter.inside_polygon((5, 5), polygon))
-        self.assertTrue(traffic_counter.inside_polygon((0, 5), polygon))
-        self.assertFalse(traffic_counter.inside_polygon((15, 5), polygon))
+        next_frame = [
+            (4, "car", 0.90, (120, 10, 140, 30)),
+            (12, "bus", 0.86, (20, 20, 40, 40)),
+        ]
+        _, current_tracks, counts = traffic_counter.evaluate_tracks(next_frame, polygon)
+        self.assertEqual(set(current_tracks), {12})
+        self.assertEqual(counts["car"], 0)
+        self.assertEqual(counts["truck"], 0)
+        self.assertEqual(counts["bus"], 1)
+        self.assertEqual(len(current_tracks), counts["bus"])
+
         with self.assertRaises(traffic_counter.argparse.ArgumentTypeError):
             traffic_counter.parse_polygon("0,0,10,10")
+
+    def test_occupancy_alert_transitions_and_cooldown(self):
+        active, event, last_alert = traffic_counter.update_alert_state(
+            15, 15, False, -float("inf"), 10.0, 30.0
+        )
+        self.assertEqual((active, event, last_alert), (True, "ALERT_STARTED", 10.0))
+        active, event, last_alert = traffic_counter.update_alert_state(
+            18, 15, active, last_alert, 20.0, 30.0
+        )
+        self.assertEqual((active, event, last_alert), (True, None, 10.0))
+        active, event, last_alert = traffic_counter.update_alert_state(
+            18, 15, active, last_alert, 40.0, 30.0
+        )
+        self.assertEqual((active, event, last_alert), (True, "ALERT_REMINDER", 40.0))
+        active, event, last_alert = traffic_counter.update_alert_state(
+            14, 15, active, last_alert, 41.0, 30.0
+        )
+        self.assertEqual((active, event, last_alert), (False, "ALERT_CLEARED", 40.0))
 
     def test_crop_and_roi_parsers(self):
         self.assertEqual(detect_cars.parse_crop("2,10,3,20"), (2, 10, 3, 20))
@@ -80,9 +116,20 @@ class ArgumentValidationTests(unittest.TestCase):
 
         stream_args = self.parse_args(
             traffic_counter,
-            ["https://example.invalid/playlist.m3u8", "north_gate"],
+            [
+                "https://example.invalid/playlist.m3u8",
+                "north_gate",
+                "--threshold",
+                "12",
+                "--conf",
+                "0.5",
+            ],
         )
         self.assertTrue(stream_args.is_stream)
+        self.assertEqual(stream_args.camera_name, "north_gate")
+        self.assertEqual(stream_args.threshold, 12)
+        self.assertEqual(stream_args.conf, 0.5)
+        self.assertEqual(stream_args.roi, tuple(traffic_counter.ROI_POLYGON))
 
     def test_detect_cars_accepts_hls_and_rejects_invalid_camera(self):
         args = self.parse_args(

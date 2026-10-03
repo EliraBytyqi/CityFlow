@@ -18,4 +18,6 @@ results/*/alerts.csv
 results/*/detections.csv
 results/*/annotated.mp4
 results/*/vehicle_events.csv
+results/*/live_counts.csv
+results/*/vehicle_tracks.csv
 results/*/summary.json
