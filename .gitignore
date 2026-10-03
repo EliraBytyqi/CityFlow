@@ -1,0 +1,21 @@
+# Project-local Python environment and bytecode
+.venv/
+__pycache__/
+*.py[cod]
+yolo11n.pt
+
+# Runtime logs and generated media
+*.log
+output_*.mp4
+annotated_*.mp4
+
+# Generated traffic-counter CSVs
+counts_*.csv
+
+# Generated detect_cars data (keep the directory marker and example CSVs)
+results/*/occupancy.csv
+results/*/alerts.csv
+results/*/detections.csv
+results/*/annotated.mp4
+results/*/vehicle_events.csv
+results/*/summary.json
