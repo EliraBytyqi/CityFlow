@@ -53,6 +53,7 @@ export interface Camera {
   latest_count: number | null;
   peak_hour: number | null;
   vehicles_per_hour: number | null;
+  stream_url: string | null;
 }
 
 export interface CameraDetail extends Camera {
@@ -60,6 +61,15 @@ export interface CameraDetail extends Camera {
   peak_count: number | null;
   hourly_data: HourlyDataPoint[];
   data_source: string;
+}
+
+export interface CameraInference {
+  camera_id: string;
+  status: 'stopped' | 'connecting' | 'live' | 'error';
+  error?: string | null;
+  counts: { cars?: number; trucks?: number; buses?: number; motorcycles?: number };
+  total: number;
+  updated_at?: string | null;
 }
 
 export interface HourlyDataPoint {
@@ -165,6 +175,14 @@ export const getIntersections = () => fetchJSON<Intersection[]>('/api/intersecti
 // Cameras
 export const getCameras = () => fetchJSON<Camera[]>('/api/cameras');
 export const getCameraDetail = (id: string) => fetchJSON<CameraDetail>(`/api/cameras/${id}`);
+export const startCameraInference = (id: string) =>
+  fetchJSON<CameraInference>(`/api/cameras/${id}/inference/start`, { method: 'POST' });
+export const stopCameraInference = (id: string) =>
+  fetchJSON<CameraInference>(`/api/cameras/${id}/inference/stop`, { method: 'POST' });
+export const getCameraInference = (id: string) =>
+  fetchJSON<CameraInference>(`/api/cameras/${id}/inference`);
+export const getCameraInferenceVideoUrl = (id: string) =>
+  `${API_BASE}/api/cameras/${id}/inference/video`;
 
 // Traffic
 export const getTrafficSummary = () => fetchJSON<TrafficSummary>('/api/traffic/summary');
