@@ -109,14 +109,14 @@ def _generate_geometry():
 
 
 CAMERAS = [
-    {"id": "CAM_01", "name": "Camera Weststraat",     "road": "road_01", "lat": 52.0125, "lng": 4.3540},
-    {"id": "CAM_02", "name": "Camera Noordweg",       "road": "road_02", "lat": 52.0165, "lng": 4.3600},
-    {"id": "CAM_03", "name": "Camera Stationsweg",    "road": "road_05", "lat": 52.0138, "lng": 4.3580},
-    {"id": "CAM_04", "name": "Camera Kerkstraat",     "road": "road_03", "lat": 52.0125, "lng": 4.3620},
-    {"id": "CAM_05", "name": "Camera Industrieweg",   "road": "road_08", "lat": 52.0178, "lng": 4.3580},
-    {"id": "CAM_06", "name": "Camera Ringweg Noord",  "road": "road_11", "lat": 52.0168, "lng": 4.3560},
-    {"id": "CAM_07", "name": "Camera Ringweg Zuid",   "road": "road_17", "lat": 52.0098, "lng": 4.3590},
-    {"id": "CAM_08", "name": "Camera Marktstraat",    "road": "road_04", "lat": 52.0103, "lng": 4.3590},
+    {"id": "CAM_01", "name": "Fushë Kosovë", "road": "road_01", "lat": 42.6397, "lng": 21.0960, "stream_url": "https://gjirafa-video-live.gjirafa.net/gjvideo-slow/5zv-jaz-xqj-y20/tracks-v1a1/mono.ts.m3u8"},
+    {"id": "CAM_02", "name": "Ulpianë", "road": "road_02", "lat": 42.6500, "lng": 21.1600, "stream_url": "https://gjirafa-video-live.gjirafa.net/gjvideo-slow/mc7-cgv-ra3-a61/tracks-v1a1/mono.ts.m3u8"},
+    {"id": "CAM_03", "name": "Bregu i Diellit", "road": "road_05", "lat": 42.6480, "lng": 21.1660, "stream_url": "https://gjirafa-video-live.gjirafa.net/gjvideo-slow/jrl-15u-0vp-6r8/tracks-a1/mono.ts.m3u8"},
+    {"id": "CAM_04", "name": "Pejton", "road": "road_03", "lat": 42.6570, "lng": 21.1530, "stream_url": "https://gjirafa-video-live.gjirafa.net/gjvideo-slow/mc7-cgv-ra3-a61/tracks-a1/mono.ts.m3u8"},
+    {"id": "CAM_05", "name": "Magjistralja Vushtrri–Mitrovicë", "road": "road_08", "lat": 42.8850, "lng": 20.8660, "stream_url": "https://gjirafa-video-live.gjirafa.net/gjvideo-slow/zc6-dfj-mel-af4/tracks-a1/mono.ts.m3u8"},
+    {"id": "CAM_06", "name": "Ortakoll: Wesley Clark, Prizren", "road": "road_11", "lat": 42.2140, "lng": 20.7390, "stream_url": "https://gjirafa-video-live.gjirafa.net/gjvideo-slow/yfv-44d-9m7-6sy/tracks-a1/mono.ts.m3u8"},
+    {"id": "CAM_07", "name": "Camera Ringweg Zuid", "road": "road_17", "lat": 52.0098, "lng": 4.3590},
+    {"id": "CAM_08", "name": "Camera Marktstraat", "road": "road_04", "lat": 52.0103, "lng": 4.3590},
 ]
 
 

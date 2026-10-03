@@ -18,6 +18,7 @@ class Camera(Base):
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
     status = Column(String, default="online")  # online / offline
+    stream_url = Column(String, nullable=True)
     installed_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     measurements = relationship("TrafficMeasurement", back_populates="camera")

@@ -7,12 +7,15 @@ A smart-city traffic simulation platform that works with
 an existing AI vehicle-detection model.
 """
 
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy import inspect, text
+import asyncio
 
-from app.database import get_db, init_db
+from app.database import get_db, init_db, engine
 from app.models import Camera, Road, Intersection, TrafficMeasurement, Simulation, SimulationResult
 from app.schemas import (
     HealthResponse,
@@ -32,8 +35,9 @@ from app.schemas import (
     CompareResponse,
     MultiRoadSimulationRequest,
 )
-from app.demo_data import seed_demo_data, _traffic_multiplier
+from app.demo_data import seed_demo_data, _traffic_multiplier, CAMERAS
 from app.services.traffic_ingestion import TrafficModelAdapter
+from app.services.camera_inference import camera_inference
 from app.simulation.traffic_simulator import simulate_closure, simulate_multi_closure
 from app.simulation.scenario import get_all_scenarios, compare_closures
 from app.simulation.congestion import calculate_utilization, classify_congestion, estimate_speed
@@ -59,9 +63,23 @@ app.add_middleware(
 def startup():
     """Initialize database and seed demo data on first run."""
     init_db()
+    # create_all does not add columns to existing SQLite databases.
+    if "stream_url" not in {column["name"] for column in inspect(engine).get_columns("cameras")}:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE cameras ADD COLUMN stream_url VARCHAR"))
     db = next(get_db())
     try:
         seed_demo_data(db)
+        # Refresh locations/stream URLs on existing databases without deleting user data.
+        for camera_config in CAMERAS:
+            camera = db.query(Camera).filter(Camera.id == camera_config["id"]).first()
+            if camera:
+                camera.name = camera_config["name"]
+                camera.latitude = camera_config["lat"]
+                camera.longitude = camera_config["lng"]
+                camera.stream_url = camera_config.get("stream_url")
+                camera.status = "online" if camera.stream_url else "offline"
+        db.commit()
     finally:
         db.close()
 
@@ -207,6 +225,7 @@ def get_cameras(db: Session = Depends(get_db)):
             "latest_count": total_count,
             "peak_hour": peak.hour if peak else None,
             "vehicles_per_hour": peak.total if peak else None,
+            "stream_url": cam.stream_url,
         })
     return result
 
@@ -250,12 +269,58 @@ def get_camera_detail(camera_id: str, db: Session = Depends(get_db)):
         "latitude": camera.latitude,
         "longitude": camera.longitude,
         "status": camera.status,
+        "stream_url": camera.stream_url,
         "total_daily": sum(m.total for m in measurements),
         "peak_hour": peak.hour if peak else None,
         "peak_count": peak.total if peak else None,
         "hourly_data": hourly_data,
         "data_source": measurements[0].source if measurements else "demo",
     }
+
+
+@app.post("/api/cameras/{camera_id}/inference/start")
+def start_camera_inference(camera_id: str, db: Session = Depends(get_db)):
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    if not camera.stream_url:
+        raise HTTPException(status_code=400, detail="No live stream is configured for this camera")
+    return camera_inference.start(camera.id, camera.stream_url)
+
+
+@app.post("/api/cameras/{camera_id}/inference/stop")
+def stop_camera_inference(camera_id: str):
+    return camera_inference.stop(camera_id)
+
+
+@app.get("/api/cameras/{camera_id}/inference")
+def get_camera_inference(camera_id: str, db: Session = Depends(get_db)):
+    if not db.query(Camera).filter(Camera.id == camera_id).first():
+        raise HTTPException(status_code=404, detail="Camera not found")
+    state = camera_inference.snapshot()
+    if state["camera_id"] != camera_id:
+        return {"camera_id": camera_id, "status": "stopped", "counts": {}, "total": 0}
+    return state
+
+
+@app.get("/api/cameras/{camera_id}/inference/video")
+async def camera_inference_video(camera_id: str, request: Request, db: Session = Depends(get_db)):
+    """Return annotated YOLO frames as an MJPEG stream for the live camera panel."""
+    if not db.query(Camera).filter(Camera.id == camera_id).first():
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    async def frames():
+        last_frame = None
+        while not await request.is_disconnected():
+            state = camera_inference.snapshot()
+            frame = camera_inference.annotated_frame if state["camera_id"] == camera_id else None
+            if frame and frame is not last_frame:
+                last_frame = frame
+                yield b"--frame\r\nContent-Type: image/jpeg\r\nCache-Control: no-cache\r\n\r\n" + frame + b"\r\n"
+            await asyncio.sleep(0.05)
+
+    return StreamingResponse(frames(), media_type="multipart/x-mixed-replace; boundary=frame",
+                             headers={"Cache-Control": "no-store", "Pragma": "no-cache"})
 
 
 # ─── Traffic ─────────────────────────────────────────────────────────

@@ -43,6 +43,7 @@ class CameraOut(BaseModel):
     latest_count: Optional[int] = None
     peak_hour: Optional[int] = None
     vehicles_per_hour: Optional[int] = None
+    stream_url: Optional[str] = None
 
     class Config:
         from_attributes = True
